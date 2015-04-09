@@ -1,11 +1,12 @@
 #Implementation of the ElGamal Cryptosystem
 #Author: Ryan Riddle (ryan.riddle@uky.edu)
-#Date of Completion: April 20, 2012
+#Author: Yaker Mahieddine (mahieddine.yaker@gmail.com)
+#Date of Completion: 09 april 2015
 
 #DESCRIPTION AND IMPLEMENTATION
 #
 #This python program implements the ElGamal cryptosystem.  The program is capable of both
-#encrypting and decrypting a message.  At execution the user will be prompted for three things:
+#encrypting and decrypting a message, and signing it.  At execution the user will be prompted for three things:
 #       1) a number n which specifies the length of the prime to be generated
 #       2) a number t which specifies the desired confidence that the generated prime
 #       is actually prime
@@ -95,12 +96,21 @@ class PublicKey(object):
 		self.iNumBits = iNumBits
 
 # computes the greatest common denominator of a and b.  assumes a > b
-def gcd( a, b ):
-        if b != 0:
-                return gcd( b, a % b )
-        #a is returned if b == 0
-        return a        
-        
+# def gcd( a, b ):
+#         if b != 0:
+#                 return gcd( b, a % b )
+#         #a is returned if b == 0
+#         return a
+def gcd(a, b):
+    """Calculate the Greatest Common Divisor of a and b.
+
+    Unless b==0, the result will have the same sign as b (so that when
+    b is divided by it, the result comes out positive).
+    """
+    while b:
+        a, b = b, a % b
+    return a
+
 #computes base^exp mod modulus
 def modexp( base, exp, modulus ):
         return pow(base, exp, modulus)
@@ -111,11 +121,11 @@ def SS( num, iConfidence ):
         for i in range(iConfidence):
                 #choose random a between 1 and n-2
                 a = random.randint( 1, num-1 )
-                
+
                 #if a is not relatively prime to n, n is composite
                 if gcd( a, num ) > 1:
                         return False
-                
+
                 #declares n prime if jacobi(a, n) is congruent to a^((n-1)/2) mod n
                 if not jacobi( a, num ) % num == modexp ( a, (num-1)//2, num ):
                         return False
@@ -158,7 +168,7 @@ def jacobi( a, n ):
                         return -1 * jacobi( n, a)
                 else:
                         return jacobi(n, a )
-        
+
 
 #finds a primitive root for prime p
 #this function was implemented from the algorithm described here:
@@ -170,7 +180,7 @@ def find_primitive_root( p ):
         #p = 2x + 1 where x is a prime
         p1 = 2
         p2 = (p-1) // p1
-        
+
         #test random g's until one is found that is a primitive root mod p
         while( 1 ):
                 g = random.randint( 2, p-1 )
@@ -201,7 +211,8 @@ def find_prime(iNumBits, iConfidence):
                 p = p * 2 + 1
                 if SS(p, iConfidence):
                         return p
-        
+
+
 #encodes bytes to integers mod p.  reads bytes from file
 def encode(sPlaintext, iNumBits):
         byte_array = bytearray(sPlaintext, 'utf-16')
@@ -278,11 +289,11 @@ def decode(aiPlaintext, iNumBits):
         #m[1] = 7696128 % 65536 / (2^(8*1)) = 111 = 'o'
         #7696128 - (111 * (2^(8*1))) = 7667712
         #m[2] = 7667712 / (2^(8*2)) = 117 = 'u'
-                        
+
         decodedText = bytearray(b for b in bytes_array).decode('utf-16')
 
         return decodedText
-                                
+
 #generates public key K1 (p, g, h) and private key K2 (p, g, x)
 def generate_keys(iNumBits=256, iConfidence=32):
         #p is the prime
@@ -299,11 +310,10 @@ def generate_keys(iNumBits=256, iConfidence=32):
 
         return {'privateKey': privateKey, 'publicKey': publicKey}
 
-        
+
 #encrypts a string sPlaintext using the public key k
 def encrypt(key, sPlaintext):
         z = encode(sPlaintext, key.iNumBits)
-
 	#cipher_pairs list will hold pairs (c, d) corresponding to each integer in z
         cipher_pairs = []
         #i is an integer in z
@@ -316,11 +326,9 @@ def encrypt(key, sPlaintext):
                 d = (i*modexp( key.h, y, key.p)) % key.p
                 #add the pair to the cipher pairs list
                 cipher_pairs.append( [c, d] )
-
         encryptedStr = ""
         for pair in cipher_pairs:
                 encryptedStr += str(pair[0]) + ' ' + str(pair[1]) + ' '
-	
         return encryptedStr;
 
 #performs decryption on the cipher pairs found in Cipher using
@@ -328,7 +336,6 @@ def encrypt(key, sPlaintext):
 def decrypt(key, cipher):
         #decrpyts each pair and adds the decrypted integer to list of plaintext integers
         plaintext = []
-        
         cipherArray = cipher.split()
         if (not len(cipherArray) % 2 == 0):
                 return "Malformed Cipher Text"
@@ -344,20 +351,101 @@ def decrypt(key, cipher):
                 plain = (d*modexp( s, key.p-2, key.p)) % key.p
                 #add plain to list of plaintext integers
                 plaintext.append( plain )
-
         decryptedText = decode(plaintext, key.iNumBits)
-
 	#remove trailing null bytes
         decryptedText = "".join([ch for ch in decryptedText if ch != '\x00'])
-
         return decryptedText
+
+
+#find a k number for the first step of Elagamal signature.
+
+def findRandomK(key):
+        p = key.p
+        q = p - 1
+        k = random.randint(2,q)
+        while(gcd(k,q) != 1):
+                k = random.randint(2,q)
+        return k
+
+
+#performs the modular multiplicative inverse
+def extended_gcd(aa, bb):
+    lastremainder, remainder = abs(aa), abs(bb)
+    x, lastx, y, lasty = 0, 1, 1, 0
+    while remainder:
+        lastremainder, (quotient, remainder) = remainder, divmod(lastremainder, remainder)
+        x, lastx = lastx - quotient*x, x
+        y, lasty = lasty - quotient*y, y
+    return lastremainder, lastx * (-1 if aa < 0 else 1), lasty * (-1 if bb < 0 else 1)
+
+def modinv(a, m):
+    g, x, y = extended_gcd(a, m)
+    if g != 1:
+        raise ValueError
+    return x % m
+
+
+def textBlockToInt(cipher,key):
+        cipherArray = cipher.split()
+        res = int(cipherArray[0])
+        if (not len(cipherArray) % 2 == 0):
+                return "Malformed Cipher Text"
+        for i in range(1,len(cipherArray)-1):
+                res += (res << key.iNumBits) + int(cipherArray[i])
+        return res
+
+#performs the signature of a specific message with your private key
+def sign(key,cipher):
+        p = key.p
+        g = key.g
+        q = p - 1
+        x = key.x
+        s = 0
+        cipher_int = textBlockToInt(cipher,key)
+        #first step : find a k number with this condition :
+        #- 2 <= k <= q
+        while(s == 0):
+                k = findRandomK(key)
+                #Second step : calculate r = g^k mod p
+                r = modexp(g,k,p)
+                #third step : calculate the signature with : s = (cipher - x*r)* k^-1 mod q
+                inv_k = modinv(k,q)
+                s = ((cipher_int - x*r) * inv_k ) % q
+        return {'r':r,'s':s}
+
+#Check if the given signatur is ok
+def checkSignature(key,sign,cipher):
+        r = sign['r']
+        s = sign['s']
+        p = key.p
+        q = p - 1
+        g = key.g
+        h = key.h
+        message = textBlockToInt(cipher,key)
+        if(not 0 < r < p):
+                raise ValueError
+        if (not 0 < s < q):
+                raise ValueError
+        g_exp_m = modexp(g,message,p)
+        r_exp_s = modexp(r,s,p)
+        h_exp_r = modexp(h,r,p)
+        r_x_h = (r_exp_s * h_exp_r ) % p
+
+        if g_exp_m == r_x_h:
+                return True
+        return False
 
 def test():
         keys = generate_keys()
         priv = keys['privateKey']
         pub = keys['publicKey']
-        message = "My name is Ryan.  Here is some french text:  Maître Corbeau, sur un arbre perché.  Now some Chinese: 鋈 晛桼桾 枲柊氠 藶藽 歾炂盵 犈犆犅 壾, 軹軦軵 寁崏庲 摮 蟼襛 蝩覤 蜭蜸覟 駽髾髽 忷扴汥 "
+        message = "My name is Ryan.  Here is some french text:  Maître Corbeau, sur un arbre perché."
         cipher = encrypt(pub, message)
         plain = decrypt(priv, cipher)
-
+        signature=sign(priv,cipher)
+        print(signature)
+        print(checkSignature(pub,signature,cipher))
         return message == plain
+
+if __name__ == "__main__":
+        test()
