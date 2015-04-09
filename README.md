@@ -45,9 +45,14 @@ To decrypt the cipher text do
 
 
 To sign the cipher text do
+
     signature = elgamal.sign(privateKey,cipher)
+    #return a couple {r,s}
 To check the signature do
+
     checkSignature(publicKey,signature,cipher)
+    #return a boolean
+
 Compatibility: Python 3.4
 
 License: MIT
