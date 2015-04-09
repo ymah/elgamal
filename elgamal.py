@@ -384,7 +384,7 @@ def modinv(a, m):
         raise ValueError
     return x % m
 
-
+#Transforme a cipher string into corresponding integer
 def textBlockToInt(cipher,key):
         cipherArray = cipher.split()
         res = int(cipherArray[0])
